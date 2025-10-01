@@ -1,0 +1,473 @@
+<!-- 
+  Netskope Category Checker
+  Version: 1.0
+  Author: Peter Hayes
+  Disclaimer: This tool is not affiliated with or supported by Netskope. Use at your own risk.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Netskope Category Checker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Bootstrap 5 CSS -->
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous">
+
+  <!-- Bootstrap Icons -->
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+    rel="stylesheet"
+    integrity="sha384-CK2SzKma4jA5H/MXDUU7i1TqZlCFaD4T01vtyDFvPlD97JQyS+IsSh1nI2EFbpyk"
+    crossorigin="anonymous">
+
+  <style>
+    /* Page layout */
+    body { 
+      margin: 0 auto; 
+      width: 1000px; 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: #fff;
+      color: #111827;
+    }
+
+    h1 { 
+      margin: 20px 0px;
+    }
+
+    /* Status indicator styling */
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      color: var(--idle);
+    }
+    .status .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 1px solid #00000020;
+      background: var(--idle);
+      flex-shrink: 0;
+    }
+    .status.ok { color: var(--ok); }
+    .status.ok .dot { background: var(--ok); }
+    .status.bad { color: var(--bad); }
+    .status.bad .dot { background: var(--bad); }
+
+    :root {
+      --ok: #22c55e;
+      --bad: #ef4444;
+      --idle: #64748b;
+    }
+
+    /* Table styling */
+    .table tr,
+    .table td,
+    .table th {
+      border-color: #e5e7eb !important;
+      border-width: 1px 0;
+    }
+    .table thead th {
+      border-bottom: 2px solid #d1d5db !important;
+    }
+
+    /* Row striping */
+    #resultBody tr.row-light td { background-color: #ffffff !important; }
+    #resultBody tr.row-dark td  { background-color: #f9fafb !important; }
+  </style>
+</head>
+<body>
+  <div class="container mt-4">
+
+    <h1>Netskope Category Checker</h1>
+
+    <!-- Controls -->
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+      <button id="startStopBtn" type="button"
+              class="btn btn-success d-inline-flex gap-1">
+        <i class="bi bi-play-fill"></i><span>Start</span>
+      </button>
+
+      <button id="resetBtn" type="button"
+              class="btn btn-secondary d-inline-flex gap-1">
+        <i class="bi bi-arrow-counterclockwise"></i><span>Reset</span>
+      </button>
+
+      <button id="speedBtn" type="button"
+              class="btn btn-outline-success d-inline-flex gap-1 d-none">
+        <i class="bi bi-speedometer2"></i><span>Normal</span>
+      </button>
+
+      <input type="checkbox" class="btn-check" id="filterFailed" autocomplete="off">
+      <label id="filterBtnLabel"
+             class="btn btn-outline-primary d-inline-flex gap-1 d-none"
+             for="filterFailed">
+        <i class="bi bi-funnel"></i><span>Hide Accessible</span>
+      </label>
+    </div>
+
+    <!-- Check key (hidden until start/reset) -->
+    <div id="checkKey"
+         class="alert alert-light border mb-3 py-2 small text-center d-inline-block mx-auto d-none">
+      <span class="status bad"><span class="dot"></span></span>
+      <span class="text-danger fw-bold">Not Accessible:</span> Block, User Alert, Isolate Policy Actions, or Unreachable
+    </div>
+
+    <!-- Status summary (hidden until start/reset) -->
+    <div id="summary"
+         class="alert alert-light border mb-3 py-2 small text-center d-inline-block mx-auto d-none">
+      <span class="text-success fw-bold">Accessible:</span> <span id="countOk">0</span> |
+      <span class="text-danger fw-bold">Not Accessible:</span> <span id="countBad">0</span> |
+      <span class="text-secondary fw-bold">Pending:</span> <span id="countPending">0</span> |
+      <span class="text-secondary fw-bold">Not Started:</span> <span id="countIdle">0</span>
+    </div>
+
+    <!-- Results table -->
+    <table class="table table-sm align-middle" style="table-layout: fixed; width: 100%;">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 40%;">Category</th>
+          <th style="width: 40%;">FQDN</th>
+          <th style="width: 20%;">Status</th>
+        </tr>
+      </thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Disclaimer footer -->
+  <footer class="text-center mt-2 mb-3">
+    <small class="text-muted">
+      This tool is not affiliated with or supported by Netskope. Use at your own risk.
+    </small>
+  </footer>
+
+  <!-- Vendor scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.4/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Default delay values (normal vs. fast mode)
+      const DEFAULT_DELAY = 500;
+      const FAST_DELAY = 50;
+      let DELAY_MS = DEFAULT_DELAY;
+      let TIMEOUT_MS = 2000;
+
+      let fastMode = false;
+      let running = false;
+
+      const tbody = document.getElementById("resultBody");
+      const startStopBtn = document.getElementById("startStopBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const speedBtn = document.getElementById("speedBtn");
+      const filterFailed = document.getElementById("filterFailed");
+      const filterBtnLabel = document.getElementById("filterBtnLabel");
+      const checkKey = document.getElementById("checkKey");
+      const summary = document.getElementById("summary");
+
+      // Category check list
+      const items = [
+        ["Abortion","ns-catid-501-sn.netskopetools.com"],
+        ["Adult Content - Other","ns-catid-502-sn.netskopetools.com"],
+        ["Adult Content - Pornography","ns-catid-504-sn.netskopetools.com"],
+        ["Advocacy Groups & Trade Associations","ns-catid-555-sn.netskopetools.com"],
+        ["Aggressive","ns-catid-507-sn.netskopetools.com"],
+        ["Alcohol","ns-catid-591-sn.netskopetools.com"],
+        ["App Admin Console","ns-catid-57-sn.netskopetools.com"],
+        ["Application Suite","ns-catid-56-sn.netskopetools.com"],
+        ["Arts","ns-catid-509-sn.netskopetools.com"],
+        ["Auctions & Marketplaces","ns-catid-562-sn.netskopetools.com"],
+        ["Automotive","ns-catid-510-sn.netskopetools.com"],
+        ["Banking and Payments","ns-catid-602-sn.netskopetools.com"],
+        ["Business","ns-catid-511-sn.netskopetools.com"],
+        ["Business Intelligence and Data Analytics","ns-catid-4-sn.netskopetools.com"],
+        ["Business Process Management","ns-catid-32-sn.netskopetools.com"],
+        ["Chat, IM & other communication","ns-catid-523-sn.netskopetools.com"],
+        ["Cloud Backup","ns-catid-6-sn.netskopetools.com"],
+        ["Cloud Storage","ns-catid-7-sn.netskopetools.com"],
+        ["Collaboration","ns-catid-8-sn.netskopetools.com"],
+        ["Consumer","ns-catid-49-sn.netskopetools.com"],
+        ["Content Management","ns-catid-11-sn.netskopetools.com"],
+        ["Content Server","ns-catid-547-sn.netskopetools.com"],
+        ["Criminal Activities","ns-catid-518-sn.netskopetools.com"],
+        ["Customer Relationship Management","ns-catid-12-sn.netskopetools.com"],
+        ["Dating","ns-catid-545-sn.netskopetools.com"],
+        ["Development Tools","ns-catid-29-sn.netskopetools.com"],
+        ["Drugs","ns-catid-519-sn.netskopetools.com"],
+        ["Dynamic DNS Domain","ns-catid-573-sn.netskopetools.com"],
+        ["E-Commerce Tools","ns-catid-34-sn.netskopetools.com"],
+        ["Education","ns-catid-16-sn.netskopetools.com"],
+        ["Enterprise Resource Planning","ns-catid-17-sn.netskopetools.com"],
+        ["Entertainment","ns-catid-531-sn.netskopetools.com"],
+        ["Family & Parenting","ns-catid-534-sn.netskopetools.com"],
+        ["Fashion","ns-catid-535-sn.netskopetools.com"],
+        ["File Repositories","ns-catid-590-sn.netskopetools.com"],
+        ["File/Software Download sites","ns-catid-565-sn.netskopetools.com"],
+        ["Finance/Accounting","ns-catid-3-sn.netskopetools.com"],
+        ["Financial Aid & Scholarships","ns-catid-514-sn.netskopetools.com"],
+        ["Financial News","ns-catid-592-sn.netskopetools.com"],
+        ["Food & Drink","ns-catid-539-sn.netskopetools.com"],
+        ["Forums","ns-catid-9-sn.netskopetools.com"],
+        ["Gambling","ns-catid-503-sn.netskopetools.com"],
+        ["Games","ns-catid-593-sn.netskopetools.com"],
+        ["Generative AI","ns-catid-600-sn.netskopetools.com"],
+        ["Generative AI - Code","ns-catid-608-sn.netskopetools.com"],
+        ["Generative AI - Content and Multimedia","ns-catid-605-sn.netskopetools.com"],
+        ["Generative AI - Conversation","ns-catid-606-sn.netskopetools.com"],
+        ["Generative AI - Meeting","ns-catid-607-sn.netskopetools.com"],
+        ["Generative AI - Platform","ns-catid-604-sn.netskopetools.com"],
+        ["Generative AI - Tools and Stores","ns-catid-603-sn.netskopetools.com"],
+        ["Generative AI - Writing","ns-catid-609-sn.netskopetools.com"],
+        ["Government & Legal","ns-catid-512-sn.netskopetools.com"],
+        ["Health & Nutrition","ns-catid-540-sn.netskopetools.com"],
+        ["Help Desk Management","ns-catid-19-sn.netskopetools.com"],
+        ["Hobbies & Interests","ns-catid-541-sn.netskopetools.com"],
+        ["Home & Garden","ns-catid-543-sn.netskopetools.com"],
+        ["HR","ns-catid-20-sn.netskopetools.com"],
+        ["IaaS/PaaS","ns-catid-21-sn.netskopetools.com"],
+        ["Identity and Access Management","ns-catid-59-sn.netskopetools.com"],
+        ["Insurance","ns-catid-538-sn.netskopetools.com"],
+        ["Internet Telephony","ns-catid-566-sn.netskopetools.com"],
+        ["Investors & Patents","ns-catid-542-sn.netskopetools.com"],
+        ["IT Service/Application Management","ns-catid-14-sn.netskopetools.com"],
+        ["Job Search/Careers","ns-catid-513-sn.netskopetools.com"],
+        ["Kids","ns-catid-544-sn.netskopetools.com"],
+        ["Knowledge Management","ns-catid-35-sn.netskopetools.com"],
+        ["Lifestyle","ns-catid-546-sn.netskopetools.com"],
+        ["Login Screens","ns-catid-577-sn.netskopetools.com"],
+        ["Logistics","ns-catid-31-sn.netskopetools.com"],
+        ["Marijuana","ns-catid-576-sn.netskopetools.com"],
+        ["Marketing","ns-catid-22-sn.netskopetools.com"],
+        ["Military","ns-catid-506-sn.netskopetools.com"],
+        ["Miscellaneous","ns-catid-525-sn.netskopetools.com"],
+        ["Newly Observed Domain","ns-catid-575-sn.netskopetools.com"],
+        ["Newly Registered Domain","ns-catid-574-sn.netskopetools.com"],
+        ["News & Media","ns-catid-537-sn.netskopetools.com"],
+        ["Nursing","ns-catid-515-sn.netskopetools.com"],
+        ["Online Ads","ns-catid-553-sn.netskopetools.com"],
+        ["Parked Domains","ns-catid-549-sn.netskopetools.com"],
+        ["Pay To Surf","ns-catid-552-sn.netskopetools.com"],
+        ["Peer-to-Peer (P2P)","ns-catid-522-sn.netskopetools.com"],
+        ["Personal Sites & Blogs","ns-catid-526-sn.netskopetools.com"],
+        ["Pets","ns-catid-554-sn.netskopetools.com"],
+        ["Philanthropic Organizations","ns-catid-556-sn.netskopetools.com"],
+        ["Photo Sharing","ns-catid-527-sn.netskopetools.com"],
+        ["Piracy & Copyright Theft","ns-catid-520-sn.netskopetools.com"],
+        ["Private IP address","ns-catid-550-sn.netskopetools.com"],
+        ["Professional Networking","ns-catid-528-sn.netskopetools.com"],
+        ["Real Estate","ns-catid-558-sn.netskopetools.com"],
+        ["Redirect","ns-catid-596-sn.netskopetools.com"],
+        ["Religion","ns-catid-559-sn.netskopetools.com"],
+        ["Remote Access","ns-catid-568-sn.netskopetools.com"],
+        ["Science","ns-catid-560-sn.netskopetools.com"],
+        ["Search Engines","ns-catid-551-sn.netskopetools.com"],
+        ["Security","ns-catid-26-sn.netskopetools.com"],
+        ["Security Risk - Ad Fraud","ns-catid-583-sn.netskopetools.com"],
+        ["Security Risk - Attack","ns-catid-588-sn.netskopetools.com"],
+        ["Security Risk - Botnets","ns-catid-578-sn.netskopetools.com"],
+        ["Security Risk - Command and Control server","ns-catid-579-sn.netskopetools.com"],
+        ["Security Risk - Compromised/malicious sites","ns-catid-580-sn.netskopetools.com"],
+        ["Security Risk - Cryptocurrency Mining","ns-catid-589-sn.netskopetools.com"],
+        ["Security Risk - DGA","ns-catid-594-sn.netskopetools.com"],
+        ["Security Risk - Hacking","ns-catid-584-sn.netskopetools.com"],
+        ["Security Risk - Malware Distribution Point","ns-catid-586-sn.netskopetools.com"],
+        ["Security Risk - Miscellaneous","ns-catid-595-sn.netskopetools.com"],
+        ["Security Risk - Phishing/Fraud","ns-catid-581-sn.netskopetools.com"],
+        ["Security Risk - Spam sites","ns-catid-582-sn.netskopetools.com"],
+        ["Security Risk - Spyware & Questionable Software","ns-catid-587-sn.netskopetools.com"],
+        ["Shareware/Freeware","ns-catid-569-sn.netskopetools.com"],
+        ["Shopping","ns-catid-561-sn.netskopetools.com"],
+        ["Social","ns-catid-28-sn.netskopetools.com"],
+        ["Social & Affiliation Organizations","ns-catid-557-sn.netskopetools.com"],
+        ["Sports","ns-catid-563-sn.netskopetools.com"],
+        ["Streaming & Downloadable Audio","ns-catid-532-sn.netskopetools.com"],
+        ["Streaming & Downloadable Video","ns-catid-533-sn.netskopetools.com"],
+        ["Survey Solutions","ns-catid-39-sn.netskopetools.com"],
+        ["Technology","ns-catid-564-sn.netskopetools.com"],
+        ["Telecom and Call Center","ns-catid-40-sn.netskopetools.com"],
+        ["Telecommuting","ns-catid-516-sn.netskopetools.com"],
+        ["Tobacco","ns-catid-505-sn.netskopetools.com"],
+        ["Trading & Investing","ns-catid-536-sn.netskopetools.com"],
+        ["Translation","ns-catid-529-sn.netskopetools.com"],
+        ["Travel","ns-catid-572-sn.netskopetools.com"],
+        ["Uncategorized","ns-catid-5001-sn.netskopetools.com"],
+        ["Unreachable","ns-catid-598-sn.netskopetools.com"],
+        ["Utilities","ns-catid-570-sn.netskopetools.com"],
+        ["Weapons","ns-catid-508-sn.netskopetools.com"],
+        ["Web Analytics","ns-catid-42-sn.netskopetools.com"],
+        ["Web Conferencing","ns-catid-567-sn.netskopetools.com"],
+        ["Web Design","ns-catid-43-sn.netskopetools.com"],
+        ["Web Hosting, ISP & Telco","ns-catid-571-sn.netskopetools.com"],
+        ["Web Proxies/Anonymizers","ns-catid-58-sn.netskopetools.com"],
+        ["Webmail","ns-catid-52-sn.netskopetools.com"]
+      ].sort((a, b) => a[0].localeCompare(b[0]));
+
+      function renderTable() {
+        tbody.innerHTML = "";
+        items.forEach(([cat, host], idx) => {
+          tbody.insertAdjacentHTML("beforeend", `
+            <tr data-idx="${idx}">
+              <td>${cat}</td>
+              <td class="font-monospace"><a href="https://${host}" target="_blank" rel="noopener noreferrer">${host}</a></td>
+              <td><span class="status" id="status-${idx}"><span class="dot"></span><span>Not Started</span></span></td>
+            </tr>
+          `);
+        });
+        restripe();
+        updateSummary();
+      }
+
+      // Update the status of a category check
+      function setStatus(idx, type) {
+        const el = document.getElementById(`status-${idx}`);
+        el.classList.remove("ok", "bad");
+        const textSpan = el.querySelector("span:last-child");
+        if (type === "ok") { el.classList.add("ok"); textSpan.textContent = "Accessible"; }
+        else if (type === "bad") { el.classList.add("bad"); textSpan.textContent = "Not Accessible"; }
+        else if (type === "pending") { textSpan.textContent = "Pending"; }
+        else { textSpan.textContent = "Not Started"; }
+        applyFilter();
+        updateSummary();
+      }
+
+      // Perform the category accessibility check and update its row status
+      async function checkHost(idx, host) {
+        const url = `https://${host}/`;
+        try {
+          const res = await axios.get(url, { timeout: TIMEOUT_MS, validateStatus: () => true });
+          setStatus(idx, (res.status >= 200 && res.status < 400) ? "ok" : "bad");
+        } catch (err) {
+          // Network error, timeout, or CORS - treat as blocked
+          console.log(`Failed to reach ${host}:`, err.message);
+          setStatus(idx, "bad");
+        }
+      }
+
+      // Process the category list
+      async function runSweep() {
+        running = true;
+        startStopBtn.innerHTML = '<i class="bi bi-stop-fill"></i><span>Stop</span>';
+        startStopBtn.classList.replace("btn-success", "btn-danger");
+        resetBtn.classList.replace("btn-secondary", "btn-danger");
+        [filterBtnLabel, speedBtn, checkKey, summary].forEach(el => el.classList.remove("d-none"));
+
+        for (let i = 0; i < items.length; i++) {
+          if (!running) break;
+          const [, host] = items[i];
+          setStatus(i, "pending");
+          await checkHost(i, host);
+          if (!running) break;
+          await new Promise(r => setTimeout(r, DELAY_MS));
+        }
+
+        running = false;
+        startStopBtn.innerHTML = '<i class="bi bi-play-fill"></i><span>Start</span>';
+        startStopBtn.classList.replace("btn-danger", "btn-success");
+        resetBtn.classList.replace("btn-danger", "btn-secondary");
+        applyFilter();
+      }
+
+      // Filter table results to only show not accessible rows
+      function applyFilter() {
+        const filterOnlyFailed = filterFailed.checked;
+        tbody.querySelectorAll("tr").forEach(tr => {
+          const idx = tr.dataset.idx;
+          const text = document.querySelector(`#status-${idx} span:last-child`).textContent;
+          tr.style.display = (filterOnlyFailed && text !== "Not Accessible") ? "none" : "";
+        });
+        restripe();
+      }
+
+      // Apply alternating background colors to the visible rows
+      function restripe() {
+        let visibleIndex = 0;
+        tbody.querySelectorAll("tr").forEach(tr => {
+          if (tr.style.display === "none") return;
+          tr.classList.remove("row-light", "row-dark");
+          tr.classList.add(visibleIndex % 2 === 0 ? "row-light" : "row-dark");
+          visibleIndex++;
+        });
+      }
+
+      // Update the summary counts
+      function updateSummary() {
+        let ok=0, bad=0, pending=0, idle=0;
+        tbody.querySelectorAll(".status").forEach(statusEl => {
+          const text = statusEl.querySelector("span:last-child").textContent;
+          if (text === "Accessible") ok++;
+          else if (text === "Not Accessible") bad++;
+          else if (text === "Pending") pending++;
+          else idle++;
+        });
+        document.getElementById("countOk").textContent = ok;
+        document.getElementById("countBad").textContent = bad;
+        document.getElementById("countPending").textContent = pending;
+        document.getElementById("countIdle").textContent = idle;
+      }
+
+      // Start/stop category checking
+      startStopBtn.addEventListener("click", () => {
+        if (!running) runSweep();
+        else {
+          running = false;
+          [filterBtnLabel, speedBtn, checkKey, summary].forEach(el => el.classList.remove("d-none"));
+        }
+      });
+
+      // Reset/stop category checking
+      resetBtn.addEventListener("click", () => {
+        running = false;
+        startStopBtn.innerHTML = '<i class="bi bi-play-fill"></i><span>Start</span>';
+        startStopBtn.classList.replace("btn-danger", "btn-success");
+        resetBtn.classList.replace("btn-danger", "btn-secondary");
+        tbody.querySelectorAll(".status").forEach(statusEl => {
+          statusEl.classList.remove("ok", "bad");
+          statusEl.querySelector("span:last-child").textContent = "Not Started";
+        });
+        [filterBtnLabel, speedBtn, checkKey, summary].forEach(el => el.classList.add("d-none"));
+        filterFailed.checked = false;
+        fastMode = false; DELAY_MS = DEFAULT_DELAY; TIMEOUT_MS = 2000;
+        speedBtn.classList.remove("btn-warning");
+        speedBtn.classList.add("btn-outline-success");
+        speedBtn.innerHTML = '<i class="bi bi-speedometer2"></i><span>Normal</span>';
+        applyFilter();
+        updateSummary();
+      });
+
+      // Watch for filter changes
+      filterFailed.addEventListener("change", applyFilter);
+
+      // Switch between normal and fast category checking mode
+      speedBtn.addEventListener("click", () => {
+        fastMode = !fastMode;
+        if (fastMode) {
+          DELAY_MS = FAST_DELAY;
+          TIMEOUT_MS = 1000;
+          speedBtn.classList.remove("btn-outline-success");
+          speedBtn.classList.add("btn-warning");
+          speedBtn.innerHTML = '<i class="bi bi-speedometer2"></i><span>Fast</span>';
+        } else {
+          DELAY_MS = DEFAULT_DELAY;
+          TIMEOUT_MS = 2000;
+          speedBtn.classList.remove("btn-warning");
+          speedBtn.classList.add("btn-outline-success");
+          speedBtn.innerHTML = '<i class="bi bi-speedometer2"></i><span>Normal</span>';
+        }
+      });
+
+      // Show the table on complete page load
+      renderTable();
+    });
+  </script>
+</body>
+</html>
