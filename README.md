@@ -15,7 +15,7 @@ Checks category accessibility from a browser when running behind Netskope and fl
 
 ## Usage
 1. Clone or download this repository.
-2. Ensure your web browsing traffic is being steered through Netskope
+2. Ensure your web browsing traffic is steered through Netskope
 3. Open `ns_category_checker.html` in your browser
 4. Click **Start**
 
