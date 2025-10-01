@@ -1,5 +1,8 @@
 # netskope-category-checker
 
+## Description
+Checks category accessibility from a browser running behind Netskope and flags each category as either Accessible or Not Accessible.
+
 ## Features
 - Check category accessibility against all [Netskope Controlled Domains](https://community.netskope.com/next-gen-swg-2/netskope-controlled-domains-for-url-category-testing-867)
 - Start, Stop, and Reset controls
@@ -14,6 +17,12 @@
 1. Clone or download this repository.
 2. Open `ns_category_checker.html` in your browser
 3. Click **Start**
+
+## How It Works
+
+When you click **Start**, the page goes through a list of example Netskope category FQDNs one by one. Each site is tested in the background and marked as **Accessible** or **Not Accessible**.
+
+**Note: **Because of browser Cross-Origin Resource Sharing (CORS) restrictions, the script cannot tell the difference between Netskope policy actions such as Block, User Alert, or Isolate. All of these outcomes appear the same to the browser and will be shown as **Not Accessible**.
 
 ## License
 Licensed under MIT — free to use, modify, and share, with no warranty.
