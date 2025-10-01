@@ -1,7 +1,7 @@
 # netskope-category-checker
 
 ## Description
-Checks category accessibility from a browser running behind Netskope and flags each category as either Accessible or Not Accessible.
+Checks category accessibility from a browser when running behind Netskope and flags each category as either Accessible or Not Accessible.
 
 ## Features
 - Check category accessibility against all [Netskope Controlled Domains](https://community.netskope.com/next-gen-swg-2/netskope-controlled-domains-for-url-category-testing-867)
@@ -15,8 +15,9 @@ Checks category accessibility from a browser running behind Netskope and flags e
 
 ## Usage
 1. Clone or download this repository.
-2. Open `ns_category_checker.html` in your browser
-3. Click **Start**
+2. Ensure your web browsing traffic is being steered through Netskope
+3. Open `ns_category_checker.html` in your browser
+4. Click **Start**
 
 The Child Abuse category is intentionally commented out in the code. Running tests against this category could generate traffic that appears in Netskope logs and reports, which may appear inappropriate and cause concern. 
 
