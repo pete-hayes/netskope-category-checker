@@ -20,7 +20,7 @@ Checks category accessibility from a browser when running behind Netskope and fl
 4. Click **Start**
 
 ## Notes
-- Generative AI sub-categories can be blocked both by their own category and by the root Generative AI category. Sub-categories are currently only applicable to Generative AI.
+- With Netskope release 132, Generative AI websites can now be blocked by both the root Generative AI category and their respective sub-category. Sub-categories are currently exclusive to Generative AI.
 - Because of browser Cross-Origin Resource Sharing (CORS) restrictions, the script cannot tell the difference between Netskope policy actions such as Block, User Alert, or Isolate. All of these outcomes appear the same to the browser and will be shown as **Not Accessible**.
 - The *Child Abuse* category is intentionally commented out in the code. Running tests against this category could generate traffic that appears in Netskope logs and reports, which may appear inappropriate and cause concern. If you need to include it in your checks, you can remove the comment markers in the `items` array of the script to restore the entry.
 - Network conditions may result in Fast mode producing false positive **Not Accessible** results. Adjust the `TIMEOUT_MS` value as needed.
